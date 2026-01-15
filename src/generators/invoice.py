@@ -108,11 +108,9 @@ class InvoiceGenerator:
             total_net += line.net_weight
             total_gross += line.gross_weight
             # ИСПРАВЛЕНО: Правильный подсчет boxes
-            if is_continuation:
-                # Для второй строки пары берем original_boxes
-                total_boxes += line.original_boxes
-            else:
-                # Для обычных строк берем boxes
+            # Для второй строки пары (is_continuation) НЕ добавляем boxes,
+            # так как они уже были добавлены в первой строке
+            if not is_continuation:
                 total_boxes += line.boxes
             total_amount += line.amount
             
