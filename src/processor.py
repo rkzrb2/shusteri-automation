@@ -93,11 +93,9 @@ class DataProcessor:
         else:
             gross_weight = Decimal(0)
 
-        # Рассчитываем количество коробок пропорционально
-        if product.total_pairs > 0:
-            boxes = round((product.boxes * quantity) / product.total_pairs)
-        else:
-            boxes = 0
+        # Количество коробок берем из исходного файла БЕЗ пересчета
+        # Для разделенных строк (le24/gt24) boxes отображается только в первой строке
+        boxes = product.boxes
 
         # Сумма
         amount = product.price * quantity
