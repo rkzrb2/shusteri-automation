@@ -25,7 +25,8 @@
       "Bash(winget install:*)",
       "Bash(curl:*)",
       "Bash(\"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" auth status)",
-      "Bash(\"C:\\\\Program Files \\(x86\\)\\\\GitHub CLI\\\\gh.exe\" auth status)"
+      "Bash(\"C:\\\\Program Files \\(x86\\)\\\\GitHub CLI\\\\gh.exe\" auth status)",
+      "Bash(git remote set-url:*)"
     ]
   }
 }
