@@ -16,6 +16,8 @@ from rich.prompt import Prompt, Confirm
 
 from src.parser import InputFileParser
 from src.processor import DataProcessor
+from src.shipment_parser import ShipmentParser
+from src.shipment_processor import ShipmentProcessor
 from src.generators.invoice import InvoiceGenerator
 from src.generators.specification import SpecificationGenerator
 from src.generators.packing_list import PackingListGenerator
@@ -196,18 +198,42 @@ class ShusteriAutomation:
         else:
             return ""
     
+    def select_processing_mode(self):
+        """Выбор режима обработки"""
+        console.print("\n[bold cyan]⚙️  Выберите тип обработки:[/bold cyan]\n")
+        console.print("  [yellow]1[/yellow] - Загрузка контейнера (стандартный формат)")
+        console.print("      • 1 товар = 1 строка со всеми размерами (35-42)")
+        console.print("      • Единица измерения: пары")
+        console.print()
+        console.print("  [yellow]2[/yellow] - Отправка грузов (новый формат - полупары)")
+        console.print("      • 1 товар 1 размера = 1 строка")
+        console.print("      • Единица измерения: полупары (левый/правый)")
+        console.print("      • Расширенное описание товара")
+
+        choice = Prompt.ask(
+            "\nВведите номер",
+            choices=["1", "2"],
+            default="1"
+        )
+
+        mode = 'container' if choice == '1' else 'shipment'
+        mode_name = "Загрузка контейнера" if mode == 'container' else "Отправка грузов (полупары)"
+        console.print(f"[green]✓ Выбран режим: {mode_name}[/green]\n")
+
+        return mode
+
     def get_output_format(self):
         """Запрос формата вывода"""
         console.print("\n[cyan]📄 Выберите формат вывода:[/cyan]")
         console.print("  [yellow]1[/yellow] - Три отдельных файла (Invoice.xlsx, Specification.xlsx, PackingList.xlsx)")
         console.print("  [yellow]2[/yellow] - Один файл с тремя листами (All_Documents.xlsx)")
-        
+
         choice = Prompt.ask(
             "\nВыберите вариант",
             choices=["1", "2"],
             default="1"
         )
-        
+
         return choice
     
     def generate_combined_file(
@@ -215,29 +241,30 @@ class ShusteriAutomation:
             output_lines,
             metadata,
             output_path: Path,
-            base_name: str
+            base_name: str,
+            mode: str = 'container'
     ):
         """Генерирует один файл с тремя листами"""
         from openpyxl import Workbook, load_workbook
         import tempfile
         import os
-        
+
         combined_file = output_path / f"{base_name}_All_Documents.xlsx"
-        
+
         # Создаем временные файлы для каждого документа
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
             temp_invoice = os.path.join(tmpdir, "invoice.xlsx")
             temp_spec = os.path.join(tmpdir, "spec.xlsx")
             temp_packing = os.path.join(tmpdir, "packing.xlsx")
-            
+
             # Генерируем каждый документ во временные файлы
-            invoice_gen = InvoiceGenerator(self.config, self.preset)
+            invoice_gen = InvoiceGenerator(self.config, self.preset, mode=mode)
             invoice_gen.generate(output_lines, metadata, temp_invoice)
-            
-            spec_gen = SpecificationGenerator(self.config, self.preset)
+
+            spec_gen = SpecificationGenerator(self.config, self.preset, mode=mode)
             spec_gen.generate(output_lines, metadata, temp_spec)
-            
-            packing_gen = PackingListGenerator(self.config, self.preset)
+
+            packing_gen = PackingListGenerator(self.config, self.preset, mode=mode)
             packing_gen.generate(output_lines, metadata, temp_packing)
             
             # Создаем новый workbook для объединения
@@ -308,6 +335,7 @@ class ShusteriAutomation:
             self,
             input_file: Path,
             invoice_number: str,
+            mode: str = 'container',
             container_number: str = "",
             output_format: str = "1",
             output_dir: str = "output"
@@ -317,21 +345,40 @@ class ShusteriAutomation:
         console.print(f"\n[bold blue]🚀 Начало обработки Invoice #{invoice_number}[/bold blue]\n")
 
         try:
-            # 1. Парсинг входного файла
+            # 1. Парсинг входного файла в зависимости от режима
             console.print("[cyan]📥 Чтение входного файла...[/cyan]")
-            parser = InputFileParser(self.config)
-            products = parser.parse(str(input_file))
 
-            if not products:
-                console.print("[bold red]❌ Не найдено ни одной позиции в файле[/bold red]")
-                return
+            if mode == 'container':
+                # Старый формат: загрузка контейнера
+                parser = InputFileParser(self.config)
+                products = parser.parse(str(input_file))
 
-            console.print(f"[green]✓ Загружено {len(products)} позиций[/green]\n")
+                if not products:
+                    console.print("[bold red]❌ Не найдено ни одной позиции в файле[/bold red]")
+                    return
 
-            # 2. Обработка данных
-            console.print("[cyan]⚙️  Обработка данных...[/cyan]")
-            processor = DataProcessor(self.config)
-            output_lines = processor.process(products)
+                console.print(f"[green]✓ Загружено {len(products)} позиций[/green]\n")
+
+                # Обработка данных
+                console.print("[cyan]⚙️  Обработка данных...[/cyan]")
+                processor = DataProcessor(self.config)
+                output_lines = processor.process(products)
+
+            else:
+                # Новый формат: отправка грузов (полупары)
+                parser = ShipmentParser(str(input_file))
+                shipment_lines = parser.parse()
+
+                if not shipment_lines:
+                    console.print("[bold red]❌ Не найдено ни одной позиции в файле[/bold red]")
+                    return
+
+                console.print(f"[green]✓ Загружено {len(shipment_lines)} строк (полупар)[/green]\n")
+
+                # Обработка данных
+                console.print("[cyan]⚙️  Обработка данных...[/cyan]")
+                processor = ShipmentProcessor(self.config)
+                output_lines = processor.process(shipment_lines)
 
             console.print(f"[green]✓ Создано {len(output_lines)} строк для документов[/green]\n")
 
@@ -370,13 +417,13 @@ class ShusteriAutomation:
                 spec_file = output_path / f"{base_name}_Specification.xlsx"
                 packing_file = output_path / f"{base_name}_PackingList.xlsx"
 
-                invoice_gen = InvoiceGenerator(self.config, self.preset)
+                invoice_gen = InvoiceGenerator(self.config, self.preset, mode=mode)
                 invoice_gen.generate(output_lines, metadata, str(invoice_file))
 
-                spec_gen = SpecificationGenerator(self.config, self.preset)
+                spec_gen = SpecificationGenerator(self.config, self.preset, mode=mode)
                 spec_gen.generate(output_lines, metadata, str(spec_file))
 
-                packing_gen = PackingListGenerator(self.config, self.preset)
+                packing_gen = PackingListGenerator(self.config, self.preset, mode=mode)
                 packing_gen.generate(output_lines, metadata, str(packing_file))
                 
                 generated_files = [
@@ -390,7 +437,8 @@ class ShusteriAutomation:
                     output_lines,
                     metadata,
                     output_path,
-                    base_name
+                    base_name,
+                    mode
                 )
                 
                 generated_files = [
@@ -463,24 +511,28 @@ def main():
         
         # Цикл для создания нескольких документов
         while True:
-            # 1. Выбор входного файла
+            # 1. Выбор режима обработки
+            mode = automation.select_processing_mode()
+
+            # 2. Выбор входного файла
             input_file = automation.select_input_file()
             if not input_file:
                 break
-            
-            # 2. Запрос номера инвойса
+
+            # 3. Запрос номера инвойса
             invoice_number = automation.get_invoice_number()
-            
-            # 3. Запрос номера контейнера
+
+            # 4. Запрос номера контейнера
             container_number = automation.get_container_number()
-            
-            # 4. Запрос формата вывода
+
+            # 5. Запрос формата вывода
             output_format = automation.get_output_format()
-            
-            # 5. Обработка
+
+            # 6. Обработка
             create_another = automation.process(
                 input_file,
                 invoice_number,
+                mode,
                 container_number,
                 output_format
             )

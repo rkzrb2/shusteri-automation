@@ -10,9 +10,16 @@ from ..models import OutputLine, DocumentMetadata
 class SpecificationGenerator:
     """Генератор Спецификации"""
 
-    def __init__(self, config: dict, preset: dict):
+    def __init__(self, config: dict, preset: dict, mode: str = 'container'):
+        """
+        Args:
+            config: конфигурация
+            preset: пресет клиента
+            mode: режим работы ('container' или 'shipment')
+        """
         self.config = config
         self.preset = preset
+        self.mode = mode
 
     def generate(
             self,
@@ -86,12 +93,20 @@ class SpecificationGenerator:
             if not is_continuation:
                 item_number += 1
 
+            # Формируем описание в зависимости от режима
+            if self.mode == 'shipment':
+                # Расширенное описание уже в line.description
+                description = '' if is_continuation else line.description
+            else:
+                # Старая логика для режима container
+                description = '' if is_continuation else line.description
+
             rows.append([
                 '' if is_continuation else item_number,
                 '' if is_continuation else line.brand,
                 line.hs_code,
                 '' if is_continuation else line.article,
-                '' if is_continuation else line.description,
+                description,
                 '' if is_continuation else line.color,
                 '' if is_continuation else line.material,
                 '' if is_continuation else line.lining,

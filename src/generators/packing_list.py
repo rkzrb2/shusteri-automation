@@ -10,9 +10,16 @@ from ..models import OutputLine, DocumentMetadata
 class PackingListGenerator:
     """Генератор Упаковочного листа"""
 
-    def __init__(self, config: dict, preset: dict):
+    def __init__(self, config: dict, preset: dict, mode: str = 'container'):
+        """
+        Args:
+            config: конфигурация
+            preset: пресет клиента
+            mode: режим работы ('container' или 'shipment')
+        """
         self.config = config
         self.preset = preset
+        self.mode = mode
 
     def generate(
             self,
@@ -129,30 +136,13 @@ class PackingListGenerator:
         wb = load_workbook(output_path)
         ws = wb.active
         
-        # Проходим по строкам данных и объединяем boxes для пар
-        prev_line = None
-        current_row = data_start_row
-        
-        for line in lines:
-            is_continuation = (
-                prev_line is not None and
-                line.article == prev_line.article and
-                "более 24см" in line.insole_category and
-                line.boxes == 0 and
-                "до 24см" in prev_line.insole_category
-            )
-            
-            if is_continuation:
-                # Объединяем ячейки boxes (колонка J) для предыдущей и текущей строки
-                ws.merge_cells(f'J{current_row-1}:J{current_row}')
-                # Записываем ИСХОДНОЕ значение boxes (сумма обеих строк)
-                ws[f'J{current_row-1}'] = line.original_boxes  # ← ИСПРАВЛЕНО: используем original_boxes
-            elif line.boxes > 0:
-                # Для обычных строк просто записываем значение
-                ws[f'J{current_row}'] = line.boxes
-            
-            current_row += 1
-            prev_line = line
+        # Объединяем ячейки boxes в зависимости от режима
+        if self.mode == 'shipment':
+            # Режим shipment: объединяем по box_group
+            self._merge_boxes_shipment(ws, lines, data_start_row)
+        else:
+            # Режим container: объединяем пары строк (старая логика)
+            self._merge_boxes_container(ws, lines, data_start_row)
         
         wb.save(output_path)
         wb.close()
@@ -161,5 +151,67 @@ class PackingListGenerator:
         from ..formatters import PackingListFormatter
         formatter = PackingListFormatter(self.config)
         formatter.format(output_path, data_start_row, data_end_row)
-        
+
         return output_path
+
+    def _merge_boxes_container(self, ws, lines: List[OutputLine], data_start_row: int):
+        """
+        Объединяет ячейки boxes для режима container (старая логика)
+        Объединяет пары строк с одним артикулом (≤24см и >24см)
+        """
+        prev_line = None
+        current_row = data_start_row
+
+        for line in lines:
+            is_continuation = (
+                prev_line is not None and
+                line.article == prev_line.article and
+                "более 24см" in line.insole_category and
+                line.boxes == 0 and
+                "до 24см" in prev_line.insole_category
+            )
+
+            if is_continuation:
+                # Объединяем ячейки boxes (колонка J) для предыдущей и текущей строки
+                ws.merge_cells(f'J{current_row-1}:J{current_row}')
+                # Записываем ИСХОДНОЕ значение boxes (сумма обеих строк)
+                ws[f'J{current_row-1}'] = line.original_boxes
+            elif line.boxes > 0:
+                # Для обычных строк просто записываем значение
+                ws[f'J{current_row}'] = line.boxes
+
+            current_row += 1
+            prev_line = line
+
+    def _merge_boxes_shipment(self, ws, lines: List[OutputLine], data_start_row: int):
+        """
+        Объединяет ячейки boxes для режима shipment
+        Объединяет строки с одинаковым box_group
+        """
+        if not lines:
+            return
+
+        # Находим группы строк с одинаковым box_group
+        current_group = lines[0].box_group
+        group_start_row = data_start_row
+
+        for idx, line in enumerate(lines):
+            current_row = data_start_row + idx
+
+            # Если сменилась группа или это последняя строка
+            if line.box_group != current_group or idx == len(lines) - 1:
+                # Определяем конец предыдущей группы
+                group_end_row = current_row - 1 if line.box_group != current_group else current_row
+
+                # Объединяем ячейки если группа больше 1 строки
+                if group_end_row > group_start_row:
+                    ws.merge_cells(f'J{group_start_row}:J{group_end_row}')
+
+                # Записываем значение boxes для группы
+                if lines[group_start_row - data_start_row].boxes > 0:
+                    ws[f'J{group_start_row}'] = lines[group_start_row - data_start_row].boxes
+
+                # Начинаем новую группу
+                if idx < len(lines) - 1:
+                    current_group = line.box_group
+                    group_start_row = current_row

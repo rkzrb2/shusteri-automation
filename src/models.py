@@ -47,6 +47,68 @@ class ProductLine(BaseModel):
                    if size in [38, 39, 40, 41, 42])
 
 
+class ShipmentLine(BaseModel):
+    """
+    Одна строка товара из файла "Перечень отправки грузы"
+    Представляет один товар одного размера с указанием типа полупары
+    """
+
+    # Идентификация
+    row_number: int                         # Номер строки в Excel
+    article: str                            # Артикул (пример: "SU29133-1R")
+    brand: str                              # Марка (пример: "V.I.KONTY")
+
+    # ТН ВЭД (единственный!)
+    hs_code: str                            # Код ТН ВЭД (пример: "6403911100")
+
+    # Характеристики товара
+    shoe_type: str                          # Вид обуви (пример: "Ботинки женские")
+    material: str                           # Материал верха (пример: "нат.замша")
+    color: str                              # Цвет (пример: "чёрный")
+    lining: str                             # Материал подкладки (пример: "текстиль")
+    sole: str                               # Материал подошвы (пример: "нитрилкаучук")
+    heel_height: str                        # Высота каблука (пример: "невыс. (ров./до 3 см.)")
+    shaft_height: str                       # Высота голенища (пример: "12cm")
+    composition: Optional[str] = None       # Процентный состав (пример: "0.95/0.05")
+    perforation: str                        # С/без перфорации (пример: "без")
+
+    # Размер и тип полупары
+    size: int                               # Размер (36 или 37)
+    halfpair_type: str                      # "левый полупарок" или "правый полупарок"
+
+    # Количество и упаковка
+    halfpairs_loaded: int                   # Количество полупар загружено (обычно 1)
+    box_group: Optional[int] = None         # Номер коробки (группа объединенных ячеек)
+    boxes_in_group: Optional[int] = None    # Количество коробок в группе (из столбца P)
+
+    # Веса и объем
+    net_weight_per_unit: Decimal            # Вес нетто на штук (пример: 0.37)
+    gross_weight_per_box: Optional[Decimal] = None  # Вес брутто на коробку (пример: 15.4)
+    box_volume: Optional[Decimal] = None    # Объём коробки
+
+    # Цена
+    price: Decimal                          # Цена за полупару (пример: 64.5)
+
+    # Вычисляемые свойства
+    @property
+    def total_net_weight(self) -> Decimal:
+        """Вес нетто = вес на единицу × количество полупар"""
+        return self.net_weight_per_unit * Decimal(self.halfpairs_loaded)
+
+    @property
+    def total_amount(self) -> Decimal:
+        """Сумма = цена × количество полупар"""
+        return self.price * Decimal(self.halfpairs_loaded)
+
+    @property
+    def insole_category(self) -> str:
+        """
+        Категория длины стельки
+        Для нового формата: только размеры 36-37, все ≤24см
+        """
+        return "длина стельки до 24см"
+
+
 class OutputLine(BaseModel):
     """Строка для выходных документов"""
     brand: str
@@ -67,6 +129,15 @@ class OutputLine(BaseModel):
     price: Decimal
     amount: Decimal
     kiz_codes: List[str] = []
+
+    # НОВЫЕ ПОЛЯ для расширенного описания (для режима shipment):
+    shoe_type: Optional[str] = None         # Вид обуви
+    shaft_height: Optional[str] = None      # Высота голенища
+    halfpair_type: Optional[str] = None     # Левый/правый полупарок
+    perforation: Optional[str] = None       # С/без перфорации
+
+    # НОВОЕ ПОЛЕ для группировки коробок:
+    box_group: Optional[int] = None         # Номер группы коробки
 
 
 class DocumentMetadata(BaseModel):

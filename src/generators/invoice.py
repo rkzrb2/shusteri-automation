@@ -10,9 +10,16 @@ from ..models import OutputLine, DocumentMetadata
 class InvoiceGenerator:
     """Генератор Инвойса"""
 
-    def __init__(self, config: dict, preset: dict):
+    def __init__(self, config: dict, preset: dict, mode: str = 'container'):
+        """
+        Args:
+            config: конфигурация
+            preset: пресет клиента
+            mode: режим работы ('container' или 'shipment')
+        """
         self.config = config
         self.preset = preset
+        self.mode = mode
 
     def generate(
             self,
@@ -90,12 +97,20 @@ class InvoiceGenerator:
             if not is_continuation:
                 item_number += 1
             
+            # Формируем описание в зависимости от режима
+            if self.mode == 'shipment':
+                # Расширенное описание уже сформировано в ShipmentProcessor
+                description = line.description
+            else:
+                # Старая логика для режима container
+                description = f"{line.description}, материал верха: {line.material}, {line.insole_category}"
+
             rows.append([
                 '' if is_continuation else item_number,  # Номер только для первой строки
                 '' if is_continuation else line.brand,
                 line.hs_code,
                 '' if is_continuation else line.article,
-                f"{line.description}, материал верха: {line.material}, {line.insole_category}",
+                description,
                 line.quantity,
                 float(line.net_weight),
                 float(line.gross_weight),
