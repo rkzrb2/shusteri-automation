@@ -3,7 +3,29 @@
     "allow": [
       "Bash(git init:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git checkout:*)",
+      "Bash(git log:*)",
+      "Bash(code --install-extension:*)",
+      "Bash(python run.py:*)",
+      "Bash(python3:*)",
+      "Bash(where:*)",
+      "Bash(py run.py:*)",
+      "Bash(py -m pip install:*)",
+      "Bash(chcp 65001)",
+      "Bash(cmd /c \"chcp 65001 >nul && py run.py\")",
+      "Bash(ls:*)",
+      "Bash(git merge:*)",
+      "Bash(git branch:*)",
+      "Bash(python:*)",
+      "Bash(del:*)",
+      "Bash(gh auth:*)",
+      "Bash(git remote add:*)",
+      "Bash(git push:*)",
+      "Bash(winget install:*)",
+      "Bash(curl:*)",
+      "Bash(\"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" auth status)",
+      "Bash(\"C:\\\\Program Files \\(x86\\)\\\\GitHub CLI\\\\gh.exe\" auth status)"
     ]
   }
 }
