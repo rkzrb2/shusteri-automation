@@ -42,14 +42,13 @@ class PackingListGenerator:
         rows.append([f"Buyer / Покупатель: {metadata.buyer_name}"])
         rows.append([metadata.buyer_address])
         rows.append([f"Contract / Контракт №{metadata.contract_number} from/от {metadata.contract_date}"])
-        
+
         container_text = f"Terms of delivery / Условия поставки: {metadata.terms_of_delivery}"
         container_row = [container_text, '', '', '', '', '', '', '', '', f"Container No / Контейнер №", metadata.container_number]
         rows.append(container_row)
-        
+
         rows.append([''])  # Пустая строка
 
-        # Заголовок
         header = [
             "№",
             "Brand / Марка",
@@ -71,7 +70,7 @@ class PackingListGenerator:
         total_gross = 0
         total_boxes = 0
         
-        data_start_row = 14  # Строка, где начинаются данные
+        data_start_row = 13  # Строка, где начинаются данные
         
         # Отслеживаем номер позиции и пары строк
         item_number = 0
@@ -136,13 +135,8 @@ class PackingListGenerator:
         wb = load_workbook(output_path)
         ws = wb.active
         
-        # Объединяем ячейки boxes в зависимости от режима
-        if self.mode == 'shipment':
-            # Режим shipment: объединяем по box_group
-            self._merge_boxes_shipment(ws, lines, data_start_row)
-        else:
-            # Режим container: объединяем пары строк (старая логика)
-            self._merge_boxes_container(ws, lines, data_start_row)
+        # Объединяем ячейки boxes для пар строк
+        self._merge_boxes_container(ws, lines, data_start_row)
         
         wb.save(output_path)
         wb.close()
@@ -156,8 +150,7 @@ class PackingListGenerator:
 
     def _merge_boxes_container(self, ws, lines: List[OutputLine], data_start_row: int):
         """
-        Объединяет ячейки boxes для режима container (старая логика)
-        Объединяет пары строк с одним артикулом (≤24см и >24см)
+        Объединяет ячейки boxes для пар строк с одним артикулом (≤24см и >24см)
         """
         prev_line = None
         current_row = data_start_row
@@ -182,36 +175,3 @@ class PackingListGenerator:
 
             current_row += 1
             prev_line = line
-
-    def _merge_boxes_shipment(self, ws, lines: List[OutputLine], data_start_row: int):
-        """
-        Объединяет ячейки boxes для режима shipment
-        Объединяет строки с одинаковым box_group
-        """
-        if not lines:
-            return
-
-        # Находим группы строк с одинаковым box_group
-        current_group = lines[0].box_group
-        group_start_row = data_start_row
-
-        for idx, line in enumerate(lines):
-            current_row = data_start_row + idx
-
-            # Если сменилась группа или это последняя строка
-            if line.box_group != current_group or idx == len(lines) - 1:
-                # Определяем конец предыдущей группы
-                group_end_row = current_row - 1 if line.box_group != current_group else current_row
-
-                # Объединяем ячейки если группа больше 1 строки
-                if group_end_row > group_start_row:
-                    ws.merge_cells(f'J{group_start_row}:J{group_end_row}')
-
-                # Записываем значение boxes для группы
-                if lines[group_start_row - data_start_row].boxes > 0:
-                    ws[f'J{group_start_row}'] = lines[group_start_row - data_start_row].boxes
-
-                # Начинаем новую группу
-                if idx < len(lines) - 1:
-                    current_group = line.box_group
-                    group_start_row = current_row

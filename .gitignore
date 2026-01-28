@@ -36,6 +36,7 @@ input/*
 !input/.gitkeep
 output/*
 !output/.gitkeep
+выгрузка честный знак/
 
 # Temporary files
 *.tmp

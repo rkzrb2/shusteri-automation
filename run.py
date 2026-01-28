@@ -22,6 +22,7 @@ from src.generators.invoice import InvoiceGenerator
 from src.generators.specification import SpecificationGenerator
 from src.generators.packing_list import PackingListGenerator
 from src.models import DocumentMetadata
+from src.km_loader import KMLoader
 
 # Настройка логирования
 logging.basicConfig(
@@ -172,6 +173,90 @@ class ShusteriAutomation:
             selected_file = files[int(choice) - 1]
             console.print(f"[green]✓ Выбран файл: {selected_file.name}[/green]\n")
             return selected_file
+
+    def get_km_files(self):
+        """Получает список файлов в папке выгрузка честный знак/"""
+        km_dir = Path("выгрузка честный знак")
+        if not km_dir.exists():
+            return []
+
+        # Ищем Excel файлы
+        excel_files = list(km_dir.glob("*.xlsx")) + list(km_dir.glob("*.xls"))
+        excel_files = [f for f in excel_files if not f.name.startswith('~')]  # Исключаем временные файлы
+
+        return sorted(excel_files)
+
+    def select_km_file(self):
+        """Интерактивный выбор файла маркировки (КМ)"""
+        # Спрашиваем, нужен ли файл КМ
+        use_km = Confirm.ask(
+            "\n🏷️  Использовать файл маркировки (Честный знак)?",
+            default=False
+        )
+
+        if not use_km:
+            return None
+
+        files = self.get_km_files()
+
+        if not files:
+            console.print("[yellow]⚠️  Нет файлов в папке 'выгрузка честный знак/'[/yellow]")
+            console.print("[yellow]   Продолжаем без маркировки[/yellow]\n")
+            return None
+
+        # Показываем список файлов
+        console.print("\n[bold cyan]📁 Доступные файлы маркировки:[/bold cyan]\n")
+
+        table = Table(show_header=True, header_style="bold magenta")
+        table.add_column("№", style="cyan", width=4)
+        table.add_column("Имя файла", style="green")
+        table.add_column("Размер", style="yellow", justify="right")
+        table.add_column("Дата изменения", style="blue")
+
+        for idx, file in enumerate(files, 1):
+            size_kb = file.stat().st_size / 1024
+            mtime = datetime.fromtimestamp(file.stat().st_mtime).strftime('%d.%m.%Y %H:%M')
+            table.add_row(str(idx), file.name, f"{size_kb:.1f} KB", mtime)
+
+        console.print(table)
+        console.print()
+
+        # Запрашиваем выбор
+        if len(files) == 1:
+            console.print(f"[green]✓ Автоматически выбран файл: {files[0].name}[/green]\n")
+            return files[0]
+        else:
+            choice = Prompt.ask(
+                "Выберите файл (введите номер)",
+                choices=[str(i) for i in range(1, len(files) + 1)],
+                default="1"
+            )
+            selected_file = files[int(choice) - 1]
+            console.print(f"[green]✓ Выбран файл: {selected_file.name}[/green]\n")
+            return selected_file
+
+    def enrich_with_km_codes(self, output_lines, km_loader: KMLoader):
+        """
+        Обогащает output_lines кодами маркировки из справочника КМ.
+
+        Args:
+            output_lines: список OutputLine
+            km_loader: загруженный справочник КМ
+        """
+        enriched_count = 0
+        total_km_codes = 0
+
+        for line in output_lines:
+            # Получаем КМ коды по артикулу и категории стельки
+            km_codes = km_loader.get_km_codes_for_category(line.article, line.insole_category)
+
+            if km_codes:
+                line.kiz_codes = km_codes
+                enriched_count += 1
+                total_km_codes += len(km_codes)
+
+        logger.info(f"Обогащено {enriched_count} строк, всего {total_km_codes} КМ кодов")
+        return enriched_count, total_km_codes
 
     def get_invoice_number(self):
         """Запрос номера инвойса"""
@@ -338,7 +423,8 @@ class ShusteriAutomation:
             mode: str = 'container',
             container_number: str = "",
             output_format: str = "1",
-            output_dir: str = "output"
+            output_dir: str = "output",
+            km_file: Path = None
     ):
         """Главный метод обработки"""
 
@@ -381,6 +467,18 @@ class ShusteriAutomation:
                 output_lines = processor.process(shipment_lines)
 
             console.print(f"[green]✓ Создано {len(output_lines)} строк для документов[/green]\n")
+
+            # 2.5. Обогащение данных кодами маркировки (КМ)
+            if km_file:
+                console.print("[cyan]🏷️  Загрузка кодов маркировки...[/cyan]")
+                try:
+                    km_loader = KMLoader(str(km_file))
+                    enriched_count, total_km = self.enrich_with_km_codes(output_lines, km_loader)
+                    console.print(f"[green]✓ Добавлено {total_km} КМ кодов в {enriched_count} строк[/green]\n")
+                except Exception as e:
+                    logger.error(f"Ошибка загрузки КМ: {e}")
+                    console.print(f"[yellow]⚠️  Ошибка загрузки КМ: {e}[/yellow]")
+                    console.print("[yellow]   Продолжаем без маркировки[/yellow]\n")
 
             # 3. Подготовка метаданных
             date = datetime.now().strftime('%d.%m.%Y')
@@ -469,11 +567,19 @@ class ShusteriAutomation:
             stats_table.add_column("Параметр", style="cyan")
             stats_table.add_column("Значение", style="magenta")
 
-            stats_table.add_row("Всего пар", str(total_qty))
+            # Определяем количество позиций в зависимости от режима
+            if mode == 'container':
+                positions_count = len(products)
+                unit_label = "Всего пар"
+            else:
+                positions_count = len(shipment_lines)
+                unit_label = "Всего полупар"
+
+            stats_table.add_row(unit_label, str(total_qty))
             stats_table.add_row("Сумма (CNY)", f"¥{total_amount:,.2f}")
             stats_table.add_row("Вес нетто (кг)", f"{total_net:,.3f}")
             stats_table.add_row("Вес брутто (кг)", f"{total_gross:,.3f}")
-            stats_table.add_row("Позиций", str(len(products)))
+            stats_table.add_row("Позиций", str(positions_count))
             stats_table.add_row("Строк в документах", str(len(output_lines)))
 
             console.print(stats_table)
@@ -528,13 +634,17 @@ def main():
             # 5. Запрос формата вывода
             output_format = automation.get_output_format()
 
-            # 6. Обработка
+            # 6. Выбор файла маркировки (опционально)
+            km_file = automation.select_km_file()
+
+            # 7. Обработка
             create_another = automation.process(
                 input_file,
                 invoice_number,
                 mode,
                 container_number,
-                output_format
+                output_format,
+                km_file=km_file
             )
             
             # Если пользователь не хочет создавать еще документы - выходим

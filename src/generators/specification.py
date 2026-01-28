@@ -31,11 +31,13 @@ class SpecificationGenerator:
 
         rows = []
 
-        # Шапка
+        # Шапка (правка 8 - текст "Спецификация к контракту" справа)
         rows.append(['', '', '', '', '', '', '', '', '', '', '', '', 'Спецификация к Контракту/', '', '', '', '', ''])
         rows.append(['', '', '', '', '', '', '', '', '', '', '', '', 'Specification to the Contract', '', '', '', '', ''])
         rows.append(['', '', '', '', '', '', '', '', '', '', '', '', f'№{metadata.contract_number} from/от {metadata.contract_date}', '', '', '', '', ''])
+
         rows.append(['', '', '', '', '', '', '', '', '', '', '', '', f'Container / Контейнер № {metadata.container_number}', '', '', '', '', ''])
+
         rows.append([''])  # Пустая строка 5
         rows.append([''])  # Пустая строка 6
         rows.append([''])  # Пустая строка 7
@@ -43,7 +45,6 @@ class SpecificationGenerator:
 
         rows.append([''])  # Пустая строка 9
 
-        # Заголовок таблицы
         header = [
             "№",
             "Brand / Марка",
@@ -93,13 +94,7 @@ class SpecificationGenerator:
             if not is_continuation:
                 item_number += 1
 
-            # Формируем описание в зависимости от режима
-            if self.mode == 'shipment':
-                # Расширенное описание уже в line.description
-                description = '' if is_continuation else line.description
-            else:
-                # Старая логика для режима container
-                description = '' if is_continuation else line.description
+            description = '' if is_continuation else line.description
 
             rows.append([
                 '' if is_continuation else item_number,
@@ -137,28 +132,9 @@ class SpecificationGenerator:
         data_end_row = len(rows)  # Последняя строка с данными
 
         # Итоги
-        rows.append([
-            '',
-            '',
-            '',
-            '',
-            'Total / Итого:',
-            '',
-            '',
-            '',
-            '',
-            '',
-            '',
-            total_qty,
-            round(float(total_net), 3),
-            round(float(total_gross), 3),
-            total_boxes,
-            '',
-            float(total_amount),
-            ''
-        ])
+        rows.append(['', '', '', '', 'Total / Итого:', '', '', '', '', '', '', total_qty, round(float(total_net), 3), round(float(total_gross), 3), total_boxes, '', float(total_amount), ''])
 
-        # Футер с подписями (для Specification - С Terms of delivery и С подписями!)
+        # Футер с подписями
         rows.append([f"-Manufacturer / Производитель: {metadata.seller_name}"])
         rows.append([f"-Country of origin / Страна происхождения: {self.preset['delivery']['country_of_origin_en']} / {self.preset['delivery']['country_of_origin']}"])
         rows.append(["-Country of destination / Страна назначения: Russia / Россия"])
@@ -182,10 +158,28 @@ class SpecificationGenerator:
         wb = load_workbook(output_path)
         ws = wb.active
         
-        # Проходим по строкам данных и объединяем boxes для пар
+        # Объединяем ячейки boxes для пар строк
+        self._merge_cells_container(ws, lines, data_start_row)
+
+        wb.save(output_path)
+        wb.close()
+
+        # Применяем форматирование
+        from ..formatters import SpecificationFormatter
+        formatter = SpecificationFormatter(self.config)
+        formatter.format(output_path, data_start_row, data_end_row)
+
+        return output_path
+
+    def _merge_cells_container(self, ws, lines: List[OutputLine], data_start_row: int):
+        """
+        Объединяет ячейки boxes для пар строк с одним артикулом (≤24см и >24см)
+
+        Колонка O = Qty of places (коробки)
+        """
         prev_line = None
         current_row = data_start_row
-        
+
         for line in lines:
             is_continuation = (
                 prev_line is not None and
@@ -194,25 +188,15 @@ class SpecificationGenerator:
                 line.boxes == 0 and
                 "до 24см" in prev_line.insole_category
             )
-            
+
             if is_continuation:
                 # Объединяем ячейки boxes (колонка O) для предыдущей и текущей строки
                 ws.merge_cells(f'O{current_row-1}:O{current_row}')
-                # Записываем ИСХОДНОЕ значение boxes (сумма обеих строк)
-                ws[f'O{current_row-1}'] = line.original_boxes  # ← ИСПРАВЛЕНО: используем original_boxes
+                # Записываем ИСХОДНОЕ значение boxes
+                ws[f'O{current_row-1}'] = line.original_boxes
             elif line.boxes > 0:
                 # Для обычных строк просто записываем значение
                 ws[f'O{current_row}'] = line.boxes
-            
+
             current_row += 1
             prev_line = line
-        
-        wb.save(output_path)
-        wb.close()
-        
-        # Применяем форматирование
-        from ..formatters import SpecificationFormatter
-        formatter = SpecificationFormatter(self.config)
-        formatter.format(output_path, data_start_row, data_end_row)
-        
-        return output_path
