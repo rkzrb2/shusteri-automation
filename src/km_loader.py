@@ -22,6 +22,20 @@ class KMLoader:
         self._index: Dict[Tuple[str, int], List[str]] = {}
         self._load()
 
+    def _normalize_article(self, article: str) -> str:
+        """
+        Нормализует артикул — убирает суффиксы типа ' PRG' (материал упаковки).
+
+        Примеры:
+            'GL24136-1 PRG' -> 'GL24136-1'
+            'BF25086-1' -> 'BF25086-1'
+        """
+        if not article:
+            return article
+        # Убираем пробел и 2-4 буквы в конце (PRG, BOX и т.п.)
+        normalized = re.sub(r'\s+[A-Z]{2,4}$', '', str(article).strip())
+        return normalized
+
     def _extract_article(self, nomenclature: str) -> Optional[str]:
         """
         Извлекает артикул из строки номенклатуры.
@@ -87,15 +101,18 @@ class KMLoader:
         Получает все КМ коды для артикула по указанным размерам.
 
         Args:
-            article: артикул товара (например 'GL24136-1')
+            article: артикул товара (например 'GL24136-1' или 'GL24136-1 PRG')
             sizes: список размеров (например [35, 36, 37] для ≤24см)
 
         Returns:
             Список КМ кодов для всех указанных размеров
         """
+        # Нормализуем артикул — убираем суффиксы типа ' PRG'
+        normalized_article = self._normalize_article(article)
+
         result = []
         for size in sizes:
-            key = (article, size)
+            key = (normalized_article, size)
             if key in self._index:
                 result.extend(self._index[key])
         return result
