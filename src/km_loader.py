@@ -24,17 +24,27 @@ class KMLoader:
 
     def _normalize_article(self, article: str) -> str:
         """
-        Нормализует артикул — убирает суффиксы типа ' PRG' (материал упаковки).
+        Нормализует артикул — убирает известные суффиксы материала упаковки.
 
         Примеры:
             'GL24136-1 PRG' -> 'GL24136-1'
-            'BF25086-1' -> 'BF25086-1'
+            'GL24136-1PRG' -> 'GL24136-1'
+            'Y5286N004-F002AL' -> 'Y5286N004-F002AL' (AL не убирается, это часть артикула)
         """
         if not article:
             return article
-        # Убираем пробел и 2-4 буквы в конце (PRG, BOX и т.п.)
-        normalized = re.sub(r'\s+[A-Z]{2,4}$', '', str(article).strip())
-        return normalized
+
+        # Список известных суффиксов упаковки (можно расширять)
+        packaging_suffixes = ['PRG', 'BOX', 'PKG', 'CTN', 'PCS']
+
+        # Убираем только известные суффиксы (с пробелом или без)
+        article_stripped = str(article).strip()
+        for suffix in packaging_suffixes:
+            # Паттерн: опциональный пробел + суффикс в конце строки (case-insensitive)
+            pattern = r'\s*' + suffix + r'$'
+            article_stripped = re.sub(pattern, '', article_stripped, flags=re.IGNORECASE)
+
+        return article_stripped
 
     def _extract_article(self, nomenclature: str) -> Optional[str]:
         """
