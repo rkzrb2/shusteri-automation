@@ -114,7 +114,7 @@ class SpecificationGenerator:
                 '',  # Boxes - будет заполнено после объединения
                 float(line.price),
                 float(line.amount),
-                ' '.join(line.kiz_codes) if line.kiz_codes else ''
+                '\n'.join(line.kiz_codes) if line.kiz_codes else ''
             ])
 
             total_qty += line.quantity
