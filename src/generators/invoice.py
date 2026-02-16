@@ -45,11 +45,14 @@ class InvoiceGenerator:
         rows.append([''])  # Пустая строка
         rows.append([f"COMMERCIAL INVOICE / КОММЕРЧЕСКИЙ ИНВОЙС № {metadata.invoice_number} from/от {metadata.date}"])
         rows.append([''])  # Пустая строка
-        rows.append([f"Buyer / Покупатель: {metadata.buyer_name}\n{metadata.buyer_address}"])
+        buyer_text = f"Buyer / Покупатель: {metadata.buyer_name}\n{metadata.buyer_address}"
+        if metadata.buyer_address_en:
+            buyer_text += f"\n({metadata.buyer_address_en})"
+        rows.append([buyer_text])
         rows.append([f"Contract / Контракт №{metadata.contract_number} from/от {metadata.contract_date}"])
         
         container_text = f"Terms of delivery / Условия поставки: {metadata.terms_of_delivery}"
-        container_row = [container_text, '', '', '', '', '', '', '', '', f"Container No / Контейнер №", metadata.container_number]
+        container_row = [container_text, '', '', '', '', '', '', '', '', f"Container No / Контейнер № {metadata.container_number}"]
         rows.append(container_row)
         
         rows.append([''])  # Пустая строка
@@ -92,24 +95,20 @@ class InvoiceGenerator:
                 line.boxes == 0 and
                 "до 24см" in prev_line.insole_category
             )
-            
-            # Увеличиваем номер только для первых строк
-            if not is_continuation:
-                item_number += 1
-            
+
+            item_number += 1
+
             # Формируем описание в зависимости от режима
             if self.mode == 'shipment':
-                # Расширенное описание уже сформировано в ShipmentProcessor
                 description = line.description
             else:
-                # Старая логика для режима container
                 description = f"{line.description}, материал верха: {line.material}, {line.insole_category}"
 
             rows.append([
-                '' if is_continuation else item_number,  # Номер только для первой строки
-                '' if is_continuation else line.brand,
+                item_number,
+                line.brand,
                 line.hs_code,
-                '' if is_continuation else line.article,
+                line.article,
                 description,
                 line.quantity,
                 float(line.net_weight),

@@ -22,8 +22,8 @@ seller:
 # ===========================================
 buyer:
   name: "Shoesberry LLC / ООО «Шузберри»"
-  address: "Российская Федерация, 107140, г. Москва, вн. тер. г. Муниципальный округ Красносельский, 1й Красносельский пер., д. 9А, помещ.17,16 (СУ)"
-  address_en: "Russian Federation, 107140 Moscow, ext. ter. municipal district Krasnoselsky, 1st Krasnoselsky, house 9A, room 17.16 (SU)"
+  address: "Российская Федерация, Московская область, г.о. Люберцы, пгт Томилино, 23 км Новорязанского шоссе, к18, стр 1,помещение 11"
+  address_en: "RUSSIA, MOSCOW REGION, LUBERTSY G.O.,,PHT. TOMILINO,,KM 23-Y NOVORYAZANSKOGO SHOSSE,K. 18,STR. 1,,ROOM. 11"
 
 # ===========================================
 # ДАННЫЕ КОНТРАКТА
