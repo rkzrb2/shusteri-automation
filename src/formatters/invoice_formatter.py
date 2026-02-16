@@ -116,12 +116,21 @@ class InvoiceFormatter:
         cell.alignment = Alignment(horizontal='left', vertical='center')
         ws.row_dimensions[9].height = 14.25
         
-        # Строка 10: Terms of delivery + Container
+        # Строка 10: Terms of delivery + Container (жёлтая заливка)
+        yellow_fill = PatternFill(start_color='FFFF00', end_color='FFFF00', fill_type='solid')
         ws.merge_cells('A10:I10')
         cell = ws['A10']
         cell.font = Font(name='Arial', size=10)
         cell.alignment = Alignment(horizontal='left', vertical='center')
+        cell.fill = yellow_fill
         ws.row_dimensions[10].height = 14.25
+
+        # Container No в одну ячейку J10 (объединяем J10:K10)
+        ws.merge_cells('J10:K10')
+        cell_container = ws['J10']
+        cell_container.font = Font(name='Arial', size=10)
+        cell_container.alignment = Alignment(horizontal='left', vertical='center')
+        cell_container.fill = yellow_fill
         
         # Строка 11: пустая
         ws.row_dimensions[11].height = 6.0
@@ -201,3 +210,6 @@ class InvoiceFormatter:
             cell = ws[f'A{row}']
             cell.font = Font(name='Arial', size=10)
             cell.alignment = Alignment(horizontal='left', vertical='top', wrap_text=True)
+            # Строка "Payment of the cost..." — высота 45
+            if row_offset == 5:
+                ws.row_dimensions[row].height = 45

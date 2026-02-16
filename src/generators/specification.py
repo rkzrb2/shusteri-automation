@@ -31,13 +31,11 @@ class SpecificationGenerator:
 
         rows = []
 
-        # Шапка (правка 8 - текст "Спецификация к контракту" справа)
-        rows.append(['', '', '', '', '', '', '', '', '', '', '', '', 'Спецификация к Контракту/', '', '', '', '', ''])
-        rows.append(['', '', '', '', '', '', '', '', '', '', '', '', 'Specification to the Contract', '', '', '', '', ''])
-        rows.append(['', '', '', '', '', '', '', '', '', '', '', '', f'№{metadata.contract_number} from/от {metadata.contract_date}', '', '', '', '', ''])
-
-        rows.append(['', '', '', '', '', '', '', '', '', '', '', '', f'Container / Контейнер № {metadata.container_number}', '', '', '', '', ''])
-
+        # Шапка (по эталону: 2 строки данных + пустые)
+        rows.append([f'Спецификация к Контракту/ Specification to the Contract №{metadata.contract_number} from/от {metadata.contract_date}'])
+        rows.append([f'Container No / Контейнер № {metadata.container_number}'])
+        rows.append([''])  # Пустая строка 3
+        rows.append([''])  # Пустая строка 4
         rows.append([''])  # Пустая строка 5
         rows.append([''])  # Пустая строка 6
         rows.append([''])  # Пустая строка 7
@@ -74,7 +72,7 @@ class SpecificationGenerator:
         total_boxes = 0
         total_amount = 0
         
-        data_start_row = 11  # Строка, где начинаются данные
+        data_start_row = 11  # Строка, где начинаются данные (как в эталоне)
         
         # Отслеживаем номер позиции и пары строк
         item_number = 0
@@ -89,24 +87,20 @@ class SpecificationGenerator:
                 line.boxes == 0 and
                 "до 24см" in prev_line.insole_category
             )
-            
-            # Увеличиваем номер только для первых строк
-            if not is_continuation:
-                item_number += 1
 
-            description = '' if is_continuation else line.description
+            item_number += 1
 
             rows.append([
-                '' if is_continuation else item_number,
-                '' if is_continuation else line.brand,
+                item_number,
+                line.brand,
                 line.hs_code,
-                '' if is_continuation else line.article,
-                description,
-                '' if is_continuation else line.color,
-                '' if is_continuation else line.material,
-                '' if is_continuation else line.lining,
-                '' if is_continuation else line.sole,
-                '' if is_continuation else line.heel_height,
+                line.article,
+                line.description,
+                line.color,
+                line.material,
+                line.lining,
+                line.sole,
+                line.heel_height,
                 line.insole_category,
                 line.quantity,
                 float(line.net_weight),

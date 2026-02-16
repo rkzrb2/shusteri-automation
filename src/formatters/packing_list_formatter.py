@@ -42,7 +42,7 @@ class PackingListFormatter:
     def _set_column_widths(self, ws):
         """Устанавливает ширину колонок"""
         widths = {
-            'A': 3.33,   # №
+            'A': 7.55,   # №
             'B': 13.5,   # Brand
             'C': 13.33,  # Code
             'D': 16.0,   # Factory code
@@ -128,6 +128,12 @@ class PackingListFormatter:
         cell.font = Font(name='Arial', size=10)
         cell.alignment = Alignment(horizontal='left', vertical='center')
         ws.row_dimensions[11].height = 14.25
+
+        # Container No в одну ячейку J11 (объединяем J11:K11)
+        ws.merge_cells('J11:K11')
+        cell_container = ws['J11']
+        cell_container.font = Font(name='Arial', size=10)
+        cell_container.alignment = Alignment(horizontal='left', vertical='center')
         
         # Строка 12: пустая
         ws.row_dimensions[12].height = 6.0
@@ -154,6 +160,7 @@ class PackingListFormatter:
         
         # Форматирование строк данных
         for row in range(data_start_row, data_end_row + 1):
+            ws.row_dimensions[row].height = 26.4
             for col in range(1, 12):
                 cell = ws.cell(row=row, column=col)
                 cell.border = thin_border

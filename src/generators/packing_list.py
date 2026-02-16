@@ -40,11 +40,14 @@ class PackingListGenerator:
         rows.append([f"Packing list / Упаковочный лист № {metadata.invoice_number} from/от {metadata.date}"])
         rows.append([''])  # Пустая строка
         rows.append([f"Buyer / Покупатель: {metadata.buyer_name}"])
-        rows.append([metadata.buyer_address])
+        address_text = metadata.buyer_address
+        if metadata.buyer_address_en:
+            address_text += f"\n({metadata.buyer_address_en})"
+        rows.append([address_text])
         rows.append([f"Contract / Контракт №{metadata.contract_number} from/от {metadata.contract_date}"])
 
         container_text = f"Terms of delivery / Условия поставки: {metadata.terms_of_delivery}"
-        container_row = [container_text, '', '', '', '', '', '', '', '', f"Container No / Контейнер №", metadata.container_number]
+        container_row = [container_text, '', '', '', '', '', '', '', '', f"Container No / Контейнер № {metadata.container_number}"]
         rows.append(container_row)
 
         rows.append([''])  # Пустая строка
@@ -86,17 +89,15 @@ class PackingListGenerator:
                 "до 24см" in prev_line.insole_category
             )
             
-            # Увеличиваем номер только для первых строк
-            if not is_continuation:
-                item_number += 1
+            item_number += 1
 
             rows.append([
-                '' if is_continuation else item_number,
-                '' if is_continuation else line.brand,
+                item_number,
+                line.brand,
                 line.hs_code,
-                '' if is_continuation else line.article,
-                '' if is_continuation else line.description,
-                '' if is_continuation else line.color,
+                line.article,
+                line.description,
+                line.color,
                 line.quantity,
                 float(line.net_weight),
                 float(line.gross_weight),

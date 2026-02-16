@@ -67,61 +67,64 @@ class SpecificationFormatter:
             ws.column_dimensions[col].width = width
     
     def _format_header(self, ws):
-        """Форматирует шапку документа"""
-        # Строки 1-3: Спецификация к Контракту (объединенные)
-        for row in [1, 2, 3]:
-            ws.merge_cells(f'A{row}:R{row}')
-            cell = ws[f'A{row}']
-            cell.font = Font(name='Arial', size=14, bold=True)
-            cell.alignment = Alignment(horizontal='right', vertical='center')
-        
-        # Строка 4: Container
-        ws.merge_cells('A4:R4')
-        cell = ws['A4']
+        """Форматирует шапку документа (после сокращения: 2 строки данных)"""
+        # Строка 1: Спецификация к Контракту/ Specification to the Contract №... from/от ...
+        ws.merge_cells('A1:R1')
+        cell = ws['A1']
+        cell.font = Font(name='Arial', size=14, bold=True)
+        cell.alignment = Alignment(horizontal='left', vertical='center')
+        ws.row_dimensions[1].height = 17.4
+
+        # Строка 2: Container No / Контейнер № ...
+        ws.merge_cells('A2:R2')
+        cell = ws['A2']
         cell.font = Font(name='Arial', size=12)
-        cell.alignment = Alignment(horizontal='right', vertical='center')
-        
-        # Строка 5: пустая
-        
-        # Строка 6: пустая
-        
-        # Строка 7: пустая
-        
-        # Строка 8: Specification № ... from ...
+        cell.alignment = Alignment(horizontal='left', vertical='center')
+        ws.row_dimensions[2].height = 15.0
+
+        # Строки 3-7: пустые
+
+        # Строка 8: Specification / Спецификация № ... from/от ...
         ws.merge_cells('A8:R8')
         cell = ws['A8']
         cell.font = Font(name='Arial', size=14, bold=True)
         cell.alignment = Alignment(horizontal='left', vertical='center')
-        
+        ws.row_dimensions[8].height = 22.8
+
         # Строка 9: пустая
     
     def _format_table(self, ws, data_start_row, data_end_row):
         """Форматирует таблицу с данными"""
-        # Заголовок таблицы (строка 10)
+        # Заголовок таблицы (строка 10 как в эталоне)
         header_row = 10
         ws.row_dimensions[header_row].height = 60
-        
+
         thin_border = Border(
             left=Side(style='thin'),
             right=Side(style='thin'),
             top=Side(style='thin'),
             bottom=Side(style='thin')
         )
-        
+
         # Форматирование заголовков (18 колонок A-R)
         for col in range(1, 19):
             cell = ws.cell(row=header_row, column=col)
             cell.font = Font(name='Arial', size=9, bold=True)
             cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
             cell.border = thin_border
-        
+
         # Форматирование строк данных
         for row in range(data_start_row, data_end_row + 1):
             for col in range(1, 19):
                 cell = ws.cell(row=row, column=col)
                 cell.border = thin_border
-                cell.font = Font(name='Arial', size=9)
-                
+
+                # Колонки A-D (1-4): шрифт Arial 10
+                if col <= 4:
+                    cell.font = Font(name='Arial', size=10)
+                else:
+                    cell.font = Font(name='Arial', size=9)
+
                 # Выравнивание для разных колонок
                 if col == 1:  # №
                     cell.alignment = Alignment(horizontal='center', vertical='center')
@@ -161,6 +164,9 @@ class SpecificationFormatter:
             cell = ws[f'A{row}']
             cell.font = Font(name='Arial', size=10)
             cell.alignment = Alignment(horizontal='left', vertical='top', wrap_text=True)
+            # Строка "Payment of the cost..." — высота 45
+            if row_offset == 6:
+                ws.row_dimensions[row].height = 45
         
         # Последние 2 строки для подписей (Buyer/Seller)
         signature_row = info_start + 9
