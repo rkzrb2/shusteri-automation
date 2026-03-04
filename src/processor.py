@@ -64,16 +64,25 @@ class DataProcessor:
         """Создает строку для документа"""
 
         # Определяем HS код и описание категории
+        # А также фильтруем qty_by_size для категории
+        qty_by_size = {}
+
         if category == "le24":
             hs_code = product.hs_code_le24
             insole_text = "длина стельки до 24см"
+            # Только размеры ≤24см (35-37)
+            qty_by_size = {size: qty for size, qty in product.qty_by_size.items() if size in [35, 36, 37]}
         elif category == "gt24":
             hs_code = product.hs_code_gt24
             insole_text = "длина стельки более 24см"
+            # Только размеры >24см (38+)
+            qty_by_size = {size: qty for size, qty in product.qty_by_size.items() if size in [38, 39, 40, 41, 42]}
         else:  # category == "all"
             # Если код один для всех размеров - используем его
             hs_code = product.hs_code_le24  # Они одинаковые, можно взять любой
-            
+            # Все размеры
+            qty_by_size = product.qty_by_size.copy()
+
             # Определяем диапазон размеров автоматически
             sizes = sorted(product.qty_by_size.keys())
             if sizes:
@@ -118,5 +127,6 @@ class DataProcessor:
             original_boxes=product.boxes,  # ← ДОБАВЛЕНО: Сохраняем исходное количество коробок
             price=product.price,
             amount=round(amount, 2),
-            kiz_codes=[]
+            kiz_codes=[],
+            qty_by_size=qty_by_size  # ← ДОБАВЛЕНО: Сохраняем информацию о размерах
         )

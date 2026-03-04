@@ -20,27 +20,43 @@ class KMLoader:
         """
         self.file_path = Path(file_path)
         self._index: Dict[Tuple[str, int], List[str]] = {}
+        self._used_indices: Dict[Tuple[str, int], int] = {}  # Отслеживание использованных кодов
         self._load()
+
+    # Таблица замены кириллических символов-двойников на латинские
+    _CYRILLIC_TO_LATIN = {
+        'А': 'A', 'В': 'B', 'С': 'C', 'Е': 'E', 'К': 'K',
+        'М': 'M', 'Н': 'H', 'О': 'O', 'Р': 'P', 'Т': 'T', 'Х': 'X',
+        'а': 'a', 'в': 'b', 'с': 'c', 'е': 'e', 'к': 'k',
+        'м': 'm', 'н': 'h', 'о': 'o', 'р': 'p', 'т': 't', 'х': 'x',
+    }
 
     def _normalize_article(self, article: str) -> str:
         """
-        Нормализует артикул — убирает известные суффиксы материала упаковки.
+        Нормализует артикул:
+        1. Заменяет кириллические символы-двойники на латинские (С→C, А→A и т.д.)
+        2. Убирает известные суффиксы упаковки (PRG, BOX и т.д.)
 
         Примеры:
+            'СGL90107-1' -> 'CGL90107-1'  (кириллическая С → латинская C)
             'GL24136-1 PRG' -> 'GL24136-1'
             'GL24136-1PRG' -> 'GL24136-1'
-            'Y5286N004-F002AL' -> 'Y5286N004-F002AL' (AL не убирается, это часть артикула)
         """
         if not article:
             return article
+
+        article_stripped = str(article).strip()
+
+        # Замена кириллических двойников на латинские
+        article_stripped = ''.join(
+            self._CYRILLIC_TO_LATIN.get(ch, ch) for ch in article_stripped
+        )
 
         # Список известных суффиксов упаковки (можно расширять)
         packaging_suffixes = ['PRG', 'BOX', 'PKG', 'CTN', 'PCS']
 
         # Убираем только известные суффиксы (с пробелом или без)
-        article_stripped = str(article).strip()
         for suffix in packaging_suffixes:
-            # Паттерн: опциональный пробел + суффикс в конце строки (case-insensitive)
             pattern = r'\s*' + suffix + r'$'
             article_stripped = re.sub(pattern, '', article_stripped, flags=re.IGNORECASE)
 
@@ -57,22 +73,21 @@ class KMLoader:
             'Туфли арт.CA23C1030-153(...)' -> 'CA23C1030-153'
         """
         # Основной паттерн: ищем "арт." и берём всё до открывающей скобки
-        # Универсальный подход: любая комбинация букв, цифр и дефисов после "арт."
-        match = re.search(r'арт\.[\s\W]*([A-Z0-9][A-Z0-9\-]+?)(?:\s*[\(,]|\s+[А-Я])', str(nomenclature), re.IGNORECASE)
+        # Включаем кириллические двойники (АВСЕКМНОРТХ) рядом с латиницей
+        _LAT_CYR = r'A-ZА-Я'  # Латиница + кириллица в character class
+        match = re.search(r'арт\.[\s\W]*([A-ZА-ЯЁАВСЕКМНОРТХ0-9][A-ZА-Яа-яЁё0-9\-]+?)(?:\s*[\(,]|\s+[А-Я])', str(nomenclature), re.IGNORECASE)
         if match:
             article = match.group(1).strip()
-            # Убираем trailing дефисы если есть
             article = article.rstrip('-')
             return article
 
-        # Запасной вариант: точка + артикул (старая логика)
-        match = re.search(r'\.[\s\W]*([A-Z]{1,4}[0-9\-]+[A-Za-z0-9\-]*)', str(nomenclature))
+        # Запасной вариант: точка + артикул
+        match = re.search(r'\.[\s\W]*([A-ZА-ЯАВСЕКМНОРТХ]{1,4}[0-9\-]+[A-Za-z0-9\-]*)', str(nomenclature))
         if match:
             return match.group(1)
 
         # Последний шанс: ищем любой паттерн похожий на артикул
-        # 1-2 буквы, затем цифры, буквы, дефисы
-        match = re.search(r'([A-Z]{1,2}[0-9]{2,}[A-Z]?[0-9\-]+[A-Z0-9]*)', str(nomenclature))
+        match = re.search(r'([A-ZА-ЯАВСЕКМНОРТХ]{1,2}[0-9]{2,}[A-Z]?[0-9\-]+[A-Z0-9]*)', str(nomenclature))
         return match.group(1) if match else None
 
     def _load(self):
@@ -88,8 +103,9 @@ class KMLoader:
 
             df.columns = ['Номенклатура', 'Размер', 'GTIN', 'КМ']
 
-            # Извлекаем артикулы
+            # Извлекаем артикулы и нормализуем (кириллица → латиница, убираем суффиксы)
             df['Артикул'] = df['Номенклатура'].apply(self._extract_article)
+            df['Артикул'] = df['Артикул'].apply(lambda x: self._normalize_article(x) if x else x)
 
             # Проверяем успешность извлечения
             failed = df['Артикул'].isna().sum()
@@ -171,6 +187,60 @@ class KMLoader:
             Список всех КМ кодов для артикула
         """
         return self.get_km_codes(article, [35, 36, 37, 38, 39, 40, 41])
+
+    def get_km_codes_exact(self, article: str, qty_by_size: dict) -> List[str]:
+        """
+        Получает ТОЧНОЕ количество КМ кодов для артикула по размерам.
+
+        Отслеживает использованные коды, чтобы для разных артикулов с одинаковой базой
+        (например, GL24136-1 и GL24136-1 PRG) выдавались РАЗНЫЕ коды.
+
+        Args:
+            article: артикул товара (например 'GL24136-1' или 'GL24136-1 PRG')
+            qty_by_size: словарь {размер: количество пар}, например {35: 2, 36: 3, 39: 2}
+
+        Returns:
+            Список КМ кодов точно по количеству пар для каждого размера
+
+        Example:
+            >>> loader.get_km_codes_exact('GL24136-1', {35: 2, 36: 3})
+            ['КМ1_35', 'КМ2_35', 'КМ1_36', 'КМ2_36', 'КМ3_36']
+            >>> loader.get_km_codes_exact('GL24136-1 PRG', {35: 1, 36: 2})
+            ['КМ3_35', 'КМ4_36', 'КМ5_36']  # Продолжает с того места, где остановились
+        """
+        # Нормализуем артикул - убираем суффиксы типа ' PRG'
+        normalized_article = self._normalize_article(article)
+
+        result = []
+
+        for size, qty in sorted(qty_by_size.items()):
+            key = (normalized_article, size)
+
+            if key not in self._index:
+                # Нет кодов для этой комбинации артикул+размер
+                logger.warning(f"Нет КМ кодов для {normalized_article} размер {size}")
+                continue
+
+            # Получаем индекс следующего неиспользованного кода
+            start_index = self._used_indices.get(key, 0)
+
+            # Получаем нужное количество кодов
+            available_codes = self._index[key]
+            codes_to_take = available_codes[start_index:start_index + qty]
+
+            if len(codes_to_take) < qty:
+                logger.warning(
+                    f"Недостаточно КМ кодов для {normalized_article} размер {size}: "
+                    f"нужно {qty}, доступно {len(codes_to_take)} "
+                    f"(всего кодов: {len(available_codes)}, использовано: {start_index})"
+                )
+
+            result.extend(codes_to_take)
+
+            # Обновляем индекс использованных кодов
+            self._used_indices[key] = start_index + len(codes_to_take)
+
+        return result
 
     @property
     def articles(self) -> List[str]:

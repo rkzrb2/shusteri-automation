@@ -139,6 +139,9 @@ class OutputLine(BaseModel):
     # НОВОЕ ПОЛЕ для группировки коробок:
     box_group: Optional[int] = None         # Номер группы коробки
 
+    # НОВОЕ ПОЛЕ для хранения информации о размерах (для КМ КИЗ):
+    qty_by_size: Optional[dict] = None      # {размер: количество пар}, например {35: 2, 36: 3}
+
 
 class DocumentMetadata(BaseModel):
     """Метаданные документа"""

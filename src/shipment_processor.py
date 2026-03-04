@@ -93,7 +93,10 @@ class ShipmentProcessor:
             shaft_height=line.shaft_height,
             halfpair_type=line.halfpair_type,
             perforation=line.perforation,
-            box_group=line.box_group
+            box_group=line.box_group,
+
+            # Информация о размере для КМ КИЗ (один размер на строку)
+            qty_by_size={line.size: line.halfpairs_loaded}
         )
 
         return output

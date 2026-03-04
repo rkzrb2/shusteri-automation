@@ -239,6 +239,11 @@ class ShusteriAutomation:
         """
         Обогащает output_lines кодами маркировки из справочника КМ.
 
+        Новая логика:
+        - Использует точное количество кодов для каждого размера (по qty_by_size)
+        - Отслеживает использованные коды, чтобы для артикулов с PRG и без PRG
+          выдавались РАЗНЫЕ коды (последовательно из справочника)
+
         Args:
             output_lines: список OutputLine
             km_loader: загруженный справочник КМ
@@ -247,8 +252,13 @@ class ShusteriAutomation:
         total_km_codes = 0
 
         for line in output_lines:
-            # Получаем КМ коды по артикулу и категории стельки
-            km_codes = km_loader.get_km_codes_for_category(line.article, line.insole_category)
+            # Проверяем, есть ли информация о размерах
+            if not line.qty_by_size:
+                logger.warning(f"Нет информации о размерах для артикула {line.article}, пропускаем")
+                continue
+
+            # Получаем ТОЧНОЕ количество КМ кодов для конкретных размеров
+            km_codes = km_loader.get_km_codes_exact(line.article, line.qty_by_size)
 
             if km_codes:
                 line.kiz_codes = km_codes
