@@ -6,8 +6,14 @@
     python ui_run.py
 """
 import logging
+import os
 import sys
 from pathlib import Path
+
+# Когда запущено как .exe (PyInstaller --onefile), CWD ставим рядом с исполняемым
+# файлом — чтобы папки input/, output/, presets/ находились там же.
+if getattr(sys, "frozen", False):
+    os.chdir(Path(sys.executable).parent)
 
 # Настройка логирования до импорта UI
 logging.basicConfig(
