@@ -74,22 +74,6 @@ class App(ctk.CTk):
             btn.pack(fill="x", padx=12, pady=3)
             self._nav_buttons[key] = btn
 
-        # Переключатель темы внизу
-        sidebar.pack_propagate(False)
-        bottom = ctk.CTkFrame(sidebar, fg_color="transparent")
-        bottom.pack(side="bottom", fill="x", padx=12, pady=16)
-
-        ctk.CTkLabel(bottom, text="Тема", font=ctk.CTkFont(size=11), text_color="gray").pack()
-        ctk.CTkSegmentedButton(
-            bottom,
-            values=["🌙 Dark", "☀️ Light"],
-            command=self._toggle_theme,
-            font=ctk.CTkFont(size=11),
-        ).pack(fill="x", pady=(4, 0))
-
-    def _toggle_theme(self, value: str):
-        mode = "dark" if "Dark" in value else "light"
-        ctk.set_appearance_mode(mode)
 
     # ------------------------------------------------------------------
     # Content area
@@ -98,9 +82,12 @@ class App(ctk.CTk):
         self._content = ctk.CTkFrame(self, corner_radius=0, fg_color=("gray92", "gray14"))
         self._content.pack(side="left", fill="both", expand=True)
 
-        # Создаём все вьюхи заранее (hidden)
         self._views = {
-            "generation": GenerationView(self._content),
+            "generation": GenerationView(
+                self._content,
+                navigate_to=self._show_view,
+                get_presets_view=lambda: self._views.get("presets"),
+            ),
             "presets":    PresetsView(self._content),
             "history":    HistoryView(self._content),
             "log":        LogView(self._content),

@@ -16,8 +16,10 @@ logger = logging.getLogger(__name__)
 
 
 class GenerationView(ctk.CTkFrame):
-    def __init__(self, parent):
+    def __init__(self, parent, navigate_to=None, get_presets_view=None):
         super().__init__(parent, corner_radius=0, fg_color="transparent")
+        self._navigate_to      = navigate_to
+        self._get_presets_view = get_presets_view
 
         self._preset_data: dict | None = None
         self._input_file:  Path | None = None
@@ -79,8 +81,30 @@ class GenerationView(ctk.CTkFrame):
     def _build_preset_section(self, parent):
         sec = self._section(parent, "1.  КЛИЕНТ")
 
-        self._preset_buttons_frame = ctk.CTkFrame(sec, fg_color="transparent")
-        self._preset_buttons_frame.pack(fill="x", padx=10, pady=(0, 4))
+        row = ctk.CTkFrame(sec, fg_color="transparent")
+        row.pack(fill="x", padx=10, pady=(0, 4))
+
+        self._preset_var      = ctk.StringVar()
+        self._preset_dropdown = ctk.CTkOptionMenu(
+            row,
+            variable=self._preset_var,
+            values=["—"],
+            command=self._on_preset_selected,
+            width=220,
+            font=self._body_font,
+        )
+        self._preset_dropdown.pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            row, text="✏️  Редактировать", width=130, font=self._body_font,
+            fg_color="transparent", border_width=1,
+            command=self._on_edit_preset,
+        ).pack(side="left", padx=(0, 6))
+
+        ctk.CTkButton(
+            row, text="+ Создать", width=100, font=self._body_font,
+            command=self._on_create_preset,
+        ).pack(side="left")
 
         self._preset_info_lbl = ctk.CTkLabel(
             sec, text="", font=self._small_font, text_color="gray55", justify="left"
@@ -236,64 +260,66 @@ class GenerationView(ctk.CTkFrame):
     # ------------------------------------------------------------------
     # Загрузка пресетов
     # ------------------------------------------------------------------
-    def _load_presets(self):
-        """Загружает пресеты и создаёт кнопки-переключатели."""
-        for w in self._preset_buttons_frame.winfo_children():
-            w.destroy()
-
+    def _load_presets(self, keep_selection: str = None):
+        """Загружает пресеты и обновляет dropdown."""
         presets_dir = Path("presets")
-        if not presets_dir.exists():
-            ctk.CTkLabel(
-                self._preset_buttons_frame, text="Папка presets/ не найдена",
-                font=self._small_font, text_color="gray55",
-            ).pack(side="left")
-            return
-
         self._presets: list[dict] = []
-        for f in sorted(presets_dir.glob("*.yaml")):
-            try:
-                data = yaml.safe_load(f.read_text(encoding="utf-8"))
-                self._presets.append({"file": f, "name": data.get("preset_name", f.stem), "data": data})
-            except Exception:
-                pass
+
+        if presets_dir.exists():
+            for f in sorted(presets_dir.glob("*.yaml")):
+                try:
+                    data = yaml.safe_load(f.read_text(encoding="utf-8"))
+                    self._presets.append({"file": f, "name": data.get("preset_name", f.stem), "data": data})
+                except Exception:
+                    pass
 
         if not self._presets:
-            ctk.CTkLabel(
-                self._preset_buttons_frame, text="Нет пресетов в папке presets/",
-                font=self._small_font, text_color="gray55",
-            ).pack(side="left")
+            self._preset_dropdown.configure(values=["— нет пресетов —"])
+            self._preset_var.set("— нет пресетов —")
+            self._preset_data = None
+            self._preset_info_lbl.configure(text="Создайте пресет кнопкой справа")
             return
 
-        self._preset_btn_refs: list[ctk.CTkButton] = []
-        for idx, p in enumerate(self._presets):
-            btn = ctk.CTkButton(
-                self._preset_buttons_frame,
-                text=p["name"], width=130, height=34,
-                corner_radius=8, font=self._body_font,
-                fg_color="transparent", border_width=1,
-                command=lambda i=idx: self._select_preset(i),
-            )
-            btn.pack(side="left", padx=(0, 8), pady=6)
-            self._preset_btn_refs.append(btn)
+        names = [p["name"] for p in self._presets]
+        self._preset_dropdown.configure(values=names)
 
-        # Выбираем первый пресет автоматически
-        self._select_preset(0)
+        # Восстанавливаем выбор или берём первый
+        if keep_selection and keep_selection in names:
+            self._preset_var.set(keep_selection)
+        else:
+            self._preset_var.set(names[0])
 
-    def _select_preset(self, idx: int):
-        self._preset_data = self._presets[idx]["data"]
-        for i, btn in enumerate(self._preset_btn_refs):
-            if i == idx:
-                btn.configure(fg_color=("gray30", "gray70"), text_color=("white", "black"))
-            else:
-                btn.configure(fg_color="transparent", text_color=("gray10", "gray90"))
+        self._on_preset_selected(self._preset_var.get())
 
+    def _on_preset_selected(self, name: str):
+        match = next((p for p in self._presets if p["name"] == name), None)
+        if not match:
+            return
+        self._preset_data = match["data"]
         p = self._preset_data
-        seller  = p.get("seller",   {}).get("name",  "—")
-        buyer   = p.get("buyer",    {}).get("name",  "—")
+        seller   = p.get("seller",   {}).get("name",  "—")
+        buyer    = p.get("buyer",    {}).get("name",  "—")
         contract = p.get("contract", {}).get("number","—")
         self._preset_info_lbl.configure(
             text=f"Продавец: {seller}   |   Покупатель: {buyer}   |   Договор: {contract}"
         )
+
+    def _on_edit_preset(self):
+        pv = self._get_presets_view() if self._get_presets_view else None
+        if pv:
+            current_name = self._preset_var.get()
+            idx = next((i for i, p in enumerate(pv._presets) if p["data"].get("preset_name") == current_name), 0)
+            pv._load_presets()
+            pv._select(idx)
+        if self._navigate_to:
+            self._navigate_to("presets")
+
+    def _on_create_preset(self):
+        pv = self._get_presets_view() if self._get_presets_view else None
+        if pv:
+            pv._new_preset()
+        if self._navigate_to:
+            self._navigate_to("presets")
 
     # ------------------------------------------------------------------
     # Выбор входного файла
@@ -627,6 +653,7 @@ class GenerationView(ctk.CTkFrame):
                     self._output_folder = data
                     self._set_processing(False)
                     self._open_btn.pack(pady=(0, 10))
+                    self._show_success_toast(data)
                     return
                 elif kind == "fail":
                     self._set_processing(False)
@@ -634,6 +661,53 @@ class GenerationView(ctk.CTkFrame):
         except queue.Empty:
             pass
         self.after(100, self._poll_log_queue)
+
+    def _show_success_toast(self, output_folder: str):
+        """Небольшое всплывающее уведомление об успешной генерации."""
+        toast = ctk.CTkToplevel(self)
+        toast.title("Готово!")
+        toast.geometry("420x200")
+        toast.resizable(False, False)
+        toast.grab_set()
+
+        # Центрируем относительно главного окна
+        self.update_idletasks()
+        rx = self.winfo_rootx() + self.winfo_width()  // 2 - 210
+        ry = self.winfo_rooty() + self.winfo_height() // 2 - 100
+        toast.geometry(f"+{rx}+{ry}")
+
+        ctk.CTkLabel(
+            toast, text="✅  Документы успешно созданы!",
+            font=ctk.CTkFont(size=14, weight="bold"),
+        ).pack(pady=(22, 6))
+
+        ctk.CTkLabel(
+            toast, text=f"Папка: {output_folder}",
+            font=ctk.CTkFont(size=11), text_color="gray55", wraplength=380,
+        ).pack(pady=(0, 16))
+
+        btn_row = ctk.CTkFrame(toast, fg_color="transparent")
+        btn_row.pack()
+
+        import subprocess, sys
+        ctk.CTkButton(
+            btn_row, text="📁  Открыть папку", width=140,
+            font=ctk.CTkFont(size=12),
+            command=lambda: (
+                subprocess.Popen(["explorer", output_folder]) if sys.platform == "win32" else None,
+                toast.destroy(),
+            ),
+        ).pack(side="left", padx=(0, 10))
+
+        ctk.CTkButton(
+            btn_row, text="Закрыть", width=90,
+            font=ctk.CTkFont(size=12),
+            fg_color="transparent", border_width=1,
+            command=toast.destroy,
+        ).pack(side="left")
+
+        # Авто-закрытие через 8 секунд
+        toast.after(8000, lambda: toast.destroy() if toast.winfo_exists() else None)
 
     def _append_log(self, text: str, color=None):
         self._progress_log.configure(state="normal")
