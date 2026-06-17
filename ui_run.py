@@ -15,6 +15,10 @@ from pathlib import Path
 if getattr(sys, "frozen", False):
     os.chdir(Path(sys.executable).parent)
 
+# Создаём рабочие папки при первом запуске
+for _d in ["input", "output", "presets", "выгрузка честный знак"]:
+    Path(_d).mkdir(exist_ok=True)
+
 # Настройка логирования до импорта UI
 logging.basicConfig(
     level=logging.INFO,

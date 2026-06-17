@@ -187,14 +187,20 @@ class GenerationView(ctk.CTkFrame):
         self._km_frame.pack(fill="x", padx=10, pady=(0, 8))
 
         self._km_dropdown = ctk.CTkOptionMenu(
-            self._km_frame, font=self._body_font, width=380,
+            self._km_frame, font=self._body_font, width=280,
             command=self._on_km_selected,
         )
-        self._km_dropdown.pack(side="left", padx=(0, 8))
+        self._km_dropdown.pack(side="left", padx=(0, 6))
 
         ctk.CTkButton(
             self._km_frame, text="↻", width=32, font=self._body_font,
             command=self._refresh_km_list,
+        ).pack(side="left", padx=(0, 6))
+
+        ctk.CTkButton(
+            self._km_frame, text="📂  Обзор...", width=110, font=self._body_font,
+            fg_color="transparent", border_width=1,
+            command=self._browse_km_file,
         ).pack(side="left")
 
         self._toggle_km()
@@ -409,17 +415,41 @@ class GenerationView(ctk.CTkFrame):
                 [f for f in km_dir.glob("*.xlsx") if not f.name.startswith("~")],
                 key=lambda f: f.stat().st_mtime, reverse=True,
             )
+        if not hasattr(self, "_km_files_map"):
+            self._km_files_map = {}
         if files:
             names = [f.name for f in files]
-            self._km_files_map = {f.name: f for f in files}
-            self._km_dropdown.configure(values=names)
-            self._km_dropdown.set(names[0])
+            self._km_files_map.update({f.name: f for f in files})
+            # Добавляем новые имена в dropdown, не затирая вручную добавленные
+            current_values = list(self._km_dropdown.cget("values") or [])
+            merged = list(dict.fromkeys(names + [v for v in current_values if v not in names and v != "— нет файлов —"]))
+            self._km_dropdown.configure(values=merged)
+            self._km_dropdown.set(merged[0])
             self._km_file = files[0]
         else:
-            self._km_dropdown.configure(values=["— нет файлов —"])
-            self._km_dropdown.set("— нет файлов —")
+            if not self._km_files_map:
+                self._km_dropdown.configure(values=["— нет файлов —"])
+                self._km_dropdown.set("— нет файлов —")
+                self._km_file = None
+
+    def _browse_km_file(self):
+        path = filedialog.askopenfilename(
+            title="Выберите файл маркировки (Честный знак)",
+            filetypes=[("Excel files", "*.xlsx *.xls"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        f = Path(path)
+        if not hasattr(self, "_km_files_map"):
             self._km_files_map = {}
-            self._km_file = None
+        self._km_files_map[f.name] = f
+        current_values = list(self._km_dropdown.cget("values") or [])
+        if f.name not in current_values:
+            current_values = [v for v in current_values if v != "— нет файлов —"]
+            current_values.insert(0, f.name)
+            self._km_dropdown.configure(values=current_values)
+        self._km_dropdown.set(f.name)
+        self._km_file = f
 
     def _on_km_selected(self, value: str):
         self._km_file = self._km_files_map.get(value)
