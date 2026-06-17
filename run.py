@@ -23,6 +23,7 @@ from src.generators.specification import SpecificationGenerator
 from src.generators.packing_list import PackingListGenerator
 from src.models import DocumentMetadata
 from src.km_loader import KMLoader
+from src.kiz_injector import KIZInjector
 
 # Настройка логирования
 logging.basicConfig(
@@ -235,9 +236,149 @@ class ShusteriAutomation:
             console.print(f"[green]✓ Выбран файл: {selected_file.name}[/green]\n")
             return selected_file
 
+    def get_output_files(self):
+        """Получает список xlsx файлов из папки output/"""
+        output_dir = Path("output")
+        if not output_dir.exists():
+            return []
+        files = list(output_dir.glob("*.xlsx")) + list(output_dir.glob("*.xls"))
+        files = [f for f in files if not f.name.startswith("~")]
+        return sorted(files, key=lambda f: f.stat().st_mtime, reverse=True)
+
+    def select_output_file(self):
+        """Интерактивный выбор файла из папки output/"""
+        files = self.get_output_files()
+
+        if not files:
+            console.print("[bold red]❌ Нет файлов в папке output/[/bold red]")
+            console.print("[yellow]Сначала создайте документы в основном режиме[/yellow]")
+            return None
+
+        console.print("\n[bold cyan]📁 Файлы в папке output/:[/bold cyan]\n")
+
+        table = Table(show_header=True, header_style="bold magenta")
+        table.add_column("№",  style="cyan", width=4)
+        table.add_column("Имя файла", style="green")
+        table.add_column("Размер",    style="yellow", justify="right")
+        table.add_column("Изменён",   style="blue")
+
+        for idx, file in enumerate(files, 1):
+            size_kb = file.stat().st_size / 1024
+            mtime   = datetime.fromtimestamp(file.stat().st_mtime).strftime("%d.%m.%Y %H:%M")
+            table.add_row(str(idx), file.name, f"{size_kb:.1f} KB", mtime)
+
+        console.print(table)
+        console.print()
+
+        if len(files) == 1:
+            console.print(f"[green]✓ Автоматически выбран файл: {files[0].name}[/green]\n")
+            return files[0]
+
+        choice = Prompt.ask(
+            "Выберите файл (введите номер)",
+            choices=[str(i) for i in range(1, len(files) + 1)],
+            default="1"
+        )
+        selected = files[int(choice) - 1]
+        console.print(f"[green]✓ Выбран файл: {selected.name}[/green]\n")
+        return selected
+
+    def inject_kiz_flow(self):
+        """Полный флоу: добавить КИЗ коды в уже готовый файл Спецификации"""
+        console.print("\n[bold cyan]🏷️  Добавление КИЗ кодов в существующий файл[/bold cyan]\n")
+
+        # 1. Выбор целевого файла
+        target_file = self.select_output_file()
+        if not target_file:
+            return
+
+        # 2. Выбор файла маркировки (обязательно)
+        km_files = self.get_km_files()
+        if not km_files:
+            console.print("[bold red]❌ Нет файлов маркировки в папке 'выгрузка честный знак/'[/bold red]")
+            return
+
+        console.print("\n[bold cyan]📁 Доступные файлы маркировки:[/bold cyan]\n")
+        table = Table(show_header=True, header_style="bold magenta")
+        table.add_column("№",  style="cyan", width=4)
+        table.add_column("Имя файла", style="green")
+        table.add_column("Размер",    style="yellow", justify="right")
+        table.add_column("Изменён",   style="blue")
+
+        for idx, file in enumerate(km_files, 1):
+            size_kb = file.stat().st_size / 1024
+            mtime   = datetime.fromtimestamp(file.stat().st_mtime).strftime("%d.%m.%Y %H:%M")
+            table.add_row(str(idx), file.name, f"{size_kb:.1f} KB", mtime)
+
+        console.print(table)
+        console.print()
+
+        if len(km_files) == 1:
+            km_file = km_files[0]
+            console.print(f"[green]✓ Автоматически выбран файл: {km_file.name}[/green]\n")
+        else:
+            choice = Prompt.ask(
+                "Выберите файл маркировки (введите номер)",
+                choices=[str(i) for i in range(1, len(km_files) + 1)],
+                default="1"
+            )
+            km_file = km_files[int(choice) - 1]
+            console.print(f"[green]✓ Выбран файл: {km_file.name}[/green]\n")
+
+        # 3. Перезаписать или сохранить как новый файл?
+        overwrite = Confirm.ask(
+            "💾 Перезаписать исходный файл? (Нет — сохранить как новый файл с суффиксом _with_kiz)",
+            default=False
+        )
+
+        if overwrite:
+            output_file = target_file
+        else:
+            output_file = target_file.parent / (target_file.stem + "_with_kiz" + target_file.suffix)
+
+        # 4. Загрузка КМ справочника и инъекция
+        console.print("\n[cyan]🏷️  Загрузка справочника КМ кодов...[/cyan]")
+        try:
+            km_loader = KMLoader(str(km_file))
+            console.print(f"[green]✓ Загружено {km_loader.total_codes} кодов, {len(km_loader.articles)} артикулов[/green]\n")
+        except Exception as e:
+            logger.error(f"Ошибка загрузки КМ: {e}")
+            console.print(f"[bold red]❌ Ошибка загрузки файла маркировки: {e}[/bold red]")
+            return
+
+        console.print("[cyan]✏️  Запись КИЗ кодов в файл...[/cyan]")
+        try:
+            injector = KIZInjector(km_loader)
+            stats    = injector.inject(target_file, output_file)
+        except ValueError as e:
+            console.print(f"[bold red]❌ {e}[/bold red]")
+            return
+        except Exception as e:
+            logger.error(f"Ошибка инъекции КИЗ: {e}", exc_info=True)
+            console.print(f"[bold red]❌ Ошибка: {e}[/bold red]")
+            return
+
+        # 5. Результат
+        console.print(f"\n[bold green]✅ КИЗ коды успешно добавлены![/bold green]\n")
+
+        result_table = Table(title="Результат")
+        result_table.add_column("Параметр", style="cyan")
+        result_table.add_column("Значение", style="magenta")
+        result_table.add_row("Обновлено строк",  str(stats["rows_updated"]))
+        result_table.add_row("Добавлено кодов",  str(stats["codes_added"]))
+        result_table.add_row("Пропущено строк",  str(stats["rows_skipped"]))
+        result_table.add_row("Файл",             output_file.name)
+        console.print(result_table)
+        console.print(f"\n[bold cyan]📁 Файл сохранён: {output_file.absolute()}[/bold cyan]\n")
+
     def enrich_with_km_codes(self, output_lines, km_loader: KMLoader):
         """
         Обогащает output_lines кодами маркировки из справочника КМ.
+
+        Новая логика:
+        - Использует точное количество кодов для каждого размера (по qty_by_size)
+        - Отслеживает использованные коды, чтобы для артикулов с PRG и без PRG
+          выдавались РАЗНЫЕ коды (последовательно из справочника)
 
         Args:
             output_lines: список OutputLine
@@ -247,8 +388,13 @@ class ShusteriAutomation:
         total_km_codes = 0
 
         for line in output_lines:
-            # Получаем КМ коды по артикулу и категории стельки
-            km_codes = km_loader.get_km_codes_for_category(line.article, line.insole_category)
+            # Проверяем, есть ли информация о размерах
+            if not line.qty_by_size:
+                logger.warning(f"Нет информации о размерах для артикула {line.article}, пропускаем")
+                continue
+
+            # Получаем ТОЧНОЕ количество КМ кодов для конкретных размеров
+            km_codes = km_loader.get_km_codes_exact(line.article, line.qty_by_size)
 
             if km_codes:
                 line.kiz_codes = km_codes
@@ -606,15 +752,28 @@ def main():
     
     try:
         automation = ShusteriAutomation()
-        
+
+        # Выбор главного режима работы
+        console.print("[bold cyan]⚙️  Выберите режим работы:[/bold cyan]\n")
+        console.print("  [yellow]1[/yellow] - Создать новые документы (Invoice, Specification, Packing List)")
+        console.print("  [yellow]2[/yellow] - Добавить КИЗ коды в уже готовый файл\n")
+
+        app_mode = Prompt.ask("Введите номер", choices=["1", "2"], default="1")
+
+        if app_mode == "2":
+            automation.inject_kiz_flow()
+            console.print("\n[bold green]👋 До свидания![/bold green]\n")
+            return
+
+        # Режим 1: генерация документов
         # Выбор пресета клиента
         preset = automation.select_preset()
         if not preset:
             console.print("[bold red]Не удалось выбрать пресет. Завершение работы.[/bold red]")
             return
-        
+
         automation.preset = preset
-        
+
         # Цикл для создания нескольких документов
         while True:
             # 1. Выбор режима обработки
