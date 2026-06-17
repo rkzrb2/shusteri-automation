@@ -73,7 +73,7 @@ class PackingListGenerator:
         total_gross = 0
         total_boxes = 0
         
-        data_start_row = 13  # Строка, где начинаются данные
+        data_start_row = 14  # Строка, где начинаются данные (строка 13 — заголовок таблицы)
         
         # Отслеживаем номер позиции и пары строк
         item_number = 0

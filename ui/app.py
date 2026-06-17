@@ -2,6 +2,7 @@
 Главное окно приложения Shusteri Automation.
 Сайдбар + переключение вкладок.
 """
+import tkinter as tk
 import customtkinter as ctk
 
 from ui.views.generation import GenerationView
@@ -37,6 +38,7 @@ class App(ctk.CTk):
         self._build_sidebar()
         self._build_content()
         self._show_view("generation")
+        self._setup_clipboard_bindings()
 
     # ------------------------------------------------------------------
     # Sidebar
@@ -108,3 +110,59 @@ class App(ctk.CTk):
         # Показываем новую
         self._views[key].pack(fill="both", expand=True, padx=0, pady=0)
         self._active_view = key
+
+    # ------------------------------------------------------------------
+    # Clipboard fix (Windows / CustomTkinter)
+    # ------------------------------------------------------------------
+    def _setup_clipboard_bindings(self):
+        """
+        На Windows CTkEntry (внутри — tk.Entry) не всегда обрабатывает
+        Ctrl+C/V/X/A через стандартный механизм CustomTkinter.
+        Добавляем явные привязки на уровне всего приложения.
+        """
+        def _paste(e):
+            w = e.widget
+            if isinstance(w, tk.Entry):
+                try:
+                    text = w.clipboard_get()
+                    if w.selection_present():
+                        w.delete("sel.first", "sel.last")
+                    w.insert("insert", text)
+                except tk.TclError:
+                    pass
+                return "break"
+
+        def _copy(e):
+            w = e.widget
+            if isinstance(w, tk.Entry):
+                try:
+                    if w.selection_present():
+                        w.clipboard_clear()
+                        w.clipboard_append(w.selection_get())
+                except tk.TclError:
+                    pass
+                return "break"
+
+        def _cut(e):
+            w = e.widget
+            if isinstance(w, tk.Entry):
+                try:
+                    if w.selection_present():
+                        w.clipboard_clear()
+                        w.clipboard_append(w.selection_get())
+                        w.delete("sel.first", "sel.last")
+                except tk.TclError:
+                    pass
+                return "break"
+
+        def _select_all(e):
+            w = e.widget
+            if isinstance(w, tk.Entry):
+                w.select_range(0, "end")
+                w.icursor("end")
+                return "break"
+
+        self.bind_all("<Control-v>", _paste)
+        self.bind_all("<Control-c>", _copy)
+        self.bind_all("<Control-x>", _cut)
+        self.bind_all("<Control-a>", _select_all)
