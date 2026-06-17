@@ -42,10 +42,9 @@ import tkinter as tk
 
 def _patch_ctk_entry_clipboard():
     """
-    На Windows CustomTkinter перехватывает <Control-v/c/x/a> на уровне
-    внутреннего tk.Entry и не всегда корректно обрабатывает их.
-    Патчим CTkEntry.__init__ чтобы подменять эти привязки на рабочие
-    до создания любого виджета.
+    На Windows tkinter не всегда корректно обрабатывает Ctrl+V/C/X/A
+    в CTkEntry. Патчим CTkEntry.__init__ и привязываемся к виртуальным
+    событиям <<Paste>>/<<Copy>>/<<Cut>> и <Control-v/c/x/a> одновременно.
     """
     _orig = ctk.CTkEntry.__init__
 
@@ -87,10 +86,16 @@ def _patch_ctk_entry_clipboard():
             inner.icursor("end")
             return "break"
 
-        inner.bind("<Control-v>", paste)
-        inner.bind("<Control-c>", copy)
-        inner.bind("<Control-x>", cut)
-        inner.bind("<Control-a>", select_all)
+        # Привязываемся и к виртуальным событиям (генерируются tkinter на Windows)
+        # и к прямым key-событиям — чтобы сработало в обоих случаях
+        for seq in ("<Control-v>", "<<Paste>>"):
+            inner.bind(seq, paste)
+        for seq in ("<Control-c>", "<<Copy>>"):
+            inner.bind(seq, copy)
+        for seq in ("<Control-x>", "<<Cut>>"):
+            inner.bind(seq, cut)
+        for seq in ("<Control-a>", "<<SelectAll>>"):
+            inner.bind(seq, select_all)
 
     ctk.CTkEntry.__init__ = _new_init
 
